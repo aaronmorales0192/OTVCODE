@@ -53,7 +53,6 @@ void going_straight(int time) {
   analogWrite(ENB_RIGHT,SPEED);
 
 //
-
  
   digitalWrite(In5, HIGH);
   digitalWrite(In6, LOW);
@@ -68,7 +67,7 @@ void going_straight(int time) {
   analogWrite(END_LEFT, 0);
 }
 
-void turn(char* direction, int time) {
+void turn(char* direction) {
   char main;
   char second;
   if (*direction == "RIGHT") {
@@ -96,11 +95,6 @@ void turn(char* direction, int time) {
   digitalWrite(In8, main);
   analogWrite(ENC_LEFT,SPEED);
   analogWrite(END_LEFT,SPEED);
-  delay(time);
-  analogWrite(ENA_RIGHT, 0);
-  analogWrite(ENB_RIGHT, 0);
-  analogWrite(ENC_LEFT, 0);
-  analogWrite(END_LEFT, 0);
 }
 
 void setup () {
@@ -109,8 +103,7 @@ void setup () {
   delay(1000);
   Enes100.println("Connected...");
   pinSetup();
-  going_straight(2000);
-  turn("RIGHT", 1000);
+  turn("RIGHT");
   float angle = Enes100.getTheta();
   if (Enes100.getY() > 1){
       if (angle < -1.57079632679){
@@ -121,10 +114,23 @@ void setup () {
       stopMotor();
     }
   }
-  going_straight(10000);
+  going_straight(5000);
   delay("10000");
-  // turn("LEFT", 1000);
 }
 
 
-void loop(){}
+void loop(){
+  turn("RIGHT");
+  float angle = Enes100.getTheta();
+  if (Enes100.getY() > 1){
+      if (angle < -1.57079632679){
+        stopMotor();
+      }
+  } else {
+    if (Enes100.getTheta() > 1.57079632679){
+      stopMotor();
+    }
+  }
+  going_straight(5000);
+  delay("10000");
+}
