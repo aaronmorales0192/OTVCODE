@@ -60,7 +60,7 @@ void turn(char* direction, int time) {
   char second;
   if (*direction == "RIGHT") {
     main = "HIGH";
-    main = "LOW";
+    second = "LOW";
   } else {
     main = "LOW";
     second = "HIGH";
