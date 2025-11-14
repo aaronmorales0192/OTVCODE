@@ -1,0 +1,37 @@
+
+  delay(time);
+  stopMotor();
+}
+
+void setup () {
+  delay(1000);
+  Enes100.begin("BATMAN",SEED, 534, 1116, 10, 11);
+  delay(1000);
+  Enes100.println("Connected...");
+  pinSetup();
+}
+
+
+void loop(){
+  if (phase01){ //orient vehicle
+    turn("RIGHT", 500);
+    float angle = Enes100.getTheta();
+    if (Enes100.getY() >= 1){
+      if (angle < -1.57079632679){
+        stopMotor();
+        phase01 = false;
+        phase02 = true;
+      }
+    } else {
+      if (Enes100.getTheta() > 1.57079632679){
+        stopMotor();
+        phase01 = false;
+        phase02 = true;
+      }
+    } 
+  }
+  if (phase02){  //go to mission site. 
+    going_straight(5000);
+    phase02 = false;
+  }
+}
