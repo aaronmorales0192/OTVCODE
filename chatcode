@@ -1,0 +1,233 @@
+
+
+  analogWrite(END, SPEED);
+}
+
+
+void loop() {}
+#include <Servo.h>
+
+// -------------------- SERVO SETUP --------------------
+const int SERVO1_PIN = 52;  // First servo (shakes with robot)
+const int SERVO2_PIN = 50;  // Second servo
+
+const int SERVO1_START_ANGLE   = 0;
+const int SERVO1_TARGET_ANGLE  = 130;  // Servo1 goes to 130°
+
+const int SERVO2_START_ANGLE   = 0;
+const int SERVO2_TARGET_ANGLE  = 100;  // Servo2 goes to 100° instead of 130°
+
+const int SERVO1_DOWN_STEP_DELAY_MS = 30;  // slower movement for servo1 going down
+const int SERVO_STEP_DELAY_MS       = 15;  // default servo step delay (for going back up / servo2)
+
+Servo servo1;
+Servo servo2;
+
+// -------------------- MOTOR / L298N SETUP (YOUR PINS) --------------------
+// Back Right wheel
+const int ENA = 3;
+const int IN1 = 4;
+const int IN2 = 5;
+
+// Front Right wheel
+const int ENB = 6;
+const int IN3 = 7;
+const int IN4 = 8;
+
+// Front Left wheel
+const int ENC = 22;
+const int IN5 = 24;
+const int IN6 = 26;
+
+// Back Left wheel
+const int END_M = 28; // renamed from END to avoid macro conflicts
+const int IN7   = 32;
+const int IN8   = 30;
+
+// -------------------- MOTION CONSTANTS --------------------
+// Time-based forward motion for ~3 ft with 6 cm wheels.
+// Tune FORWARD_TIME_MS by testing on the floor.
+const unsigned long FORWARD_TIME_MS   = 2000;  // forward-only movement at the start
+const unsigned long SHAKE_INTERVAL_MS = 100;   // flip forward/back every 100 ms
+
+int SPEED = 210;  // motor speed (0–255)
+
+// -------------------- MOTOR HELPERS --------------------
+
+// All 4 wheels FORWARD using your known-good forward pattern
+void driveForwardAll() {
+  // Back Right
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+  analogWrite(ENA, SPEED);
+
+  // Front Right
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, LOW);
+  analogWrite(ENB, SPEED);
+
+  // Front Left
+  digitalWrite(IN5, HIGH);
+  digitalWrite(IN6, LOW);
+  analogWrite(ENC, SPEED);
+
+  // Back Left
+  digitalWrite(IN7, HIGH);
+  digitalWrite(IN8, LOW);
+  analogWrite(END_M, SPEED);
+}
+
+// All 4 wheels BACKWARD
+void driveBackwardAll() {
+  // Back Right
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, HIGH);
+  analogWrite(ENA, SPEED);
+
+  // Front Right
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, HIGH);
+  analogWrite(ENB, SPEED);
+
+  // Front Left
+  digitalWrite(IN5, LOW);
+  digitalWrite(IN6, HIGH);
+  analogWrite(ENC, SPEED);
+
+  // Back Left
+  digitalWrite(IN7, LOW);
+  digitalWrite(IN8, HIGH);
+  analogWrite(END_M, SPEED);
+}
+
+void stopAllWheels() {
+  // Back Right
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+  analogWrite(ENA, 0);
+
+  // Front Right
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, LOW);
+  analogWrite(ENB, 0);
+
+  // Front Left
+  digitalWrite(IN5, LOW);
+  digitalWrite(IN6, LOW);
+  analogWrite(ENC, 0);
+
+  // Back Left
+  digitalWrite(IN7, LOW);
+  digitalWrite(IN8, LOW);
+  analogWrite(END_M, 0);
+}
+
+// -------------------- SERVO HELPERS --------------------
+
+// Generic slow servo move (up or down) with custom step delay
+void moveServoSlow(Servo &s, int startAngle, int endAngle, int stepDelayMs) {
+  if (endAngle > startAngle) {
+    for (int angle = startAngle; angle <= endAngle; angle++) {
+      s.write(angle);
+      delay(stepDelayMs);
+    }
+  } else {
+    for (int angle = startAngle; angle >= endAngle; angle--) {
+      s.write(angle);
+      delay(stepDelayMs);
+    }
+  }
+}
+
+// Servo1 goes DOWN while robot shakes forward/back
+void moveServo1DownWithShake() {
+  bool forward = true;
+  unsigned long lastToggle = millis();
+
+  // Start in forward
+  driveForwardAll();
+
+  for (int angle = SERVO1_START_ANGLE; angle <= SERVO1_TARGET_ANGLE; angle++) {
+    servo1.write(angle);
+
+    unsigned long now = millis();
+    if (now - lastToggle >= SHAKE_INTERVAL_MS) {
+      if (forward) {
+        driveBackwardAll();
+      } else {
+        driveForwardAll();
+      }
+      forward = !forward;
+      lastToggle = now;
+    }
+
+    delay(SERVO1_DOWN_STEP_DELAY_MS);  // slower for more shake while moving down
+  }
+
+  stopAllWheels();
+}
+
+// -------------------- SETUP & MAIN SEQUENCE --------------------
+void setup() {
+  // Attach servos
+  servo1.attach(SERVO1_PIN);
+  servo2.attach(SERVO2_PIN);
+
+  // Initialize servos to 0°
+  servo1.write(SERVO1_START_ANGLE);
+  servo2.write(SERVO2_START_ANGLE);
+
+  // Set motor pins as outputs
+  pinMode(ENA, OUTPUT);
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+
+  pinMode(ENB, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
+
+  pinMode(ENC, OUTPUT);
+  pinMode(IN5, OUTPUT);
+  pinMode(IN6, OUTPUT);
+
+  pinMode(END_M, OUTPUT);
+  pinMode(IN7, OUTPUT);
+  pinMode(IN8, OUTPUT);
+
+  stopAllWheels();
+  delay(1000); // small pause before starting sequence
+}
+
+void loop() {
+  // ---------- 0) FORWARD LOCOMOTION FIRST ----------
+  driveForwardAll();          // ONLY forward movement here
+  delay(FORWARD_TIME_MS);     // adjust this value to get ~3 ft
+  stopAllWheels();
+  delay(500);                 // small pause
+
+  // ---------- 1) SERVO 1 DOWN + SHAKE (FORWARD/BACKWARD) ----------
+  moveServo1DownWithShake();  // 0° -> 130° while shaking forward/back
+
+  // Pause at bottom (130°) for 5 seconds
+  delay(5000);
+
+  // Bring servo1 back up to 0° (normal speed)
+  moveServoSlow(servo1, SERVO1_TARGET_ANGLE, SERVO1_START_ANGLE, SERVO_STEP_DELAY_MS);
+
+  // ---------- 2) SERVO 2 DOWN (TO 100°) THEN BACK UP ----------
+  // Move servo on pin 50 from 0° to 100° (normal speed)
+  moveServoSlow(servo2, SERVO2_START_ANGLE, SERVO2_TARGET_ANGLE, SERVO_STEP_DELAY_MS);
+
+  // Pause at bottom (100°) for 3 seconds
+  delay(3000);
+
+  // Bring servo2 back up to 0°
+  moveServoSlow(servo2, SERVO2_TARGET_ANGLE, SERVO2_START_ANGLE, SERVO_STEP_DELAY_MS);
+
+  // ---------- 3) STOP FOREVER ----------
+  stopAllWheels();
+  while (true) {
+    // run once only
+  }
+}
+
