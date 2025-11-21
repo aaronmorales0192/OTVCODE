@@ -1,0 +1,361 @@
+#include "Enes100.h"
+#include <string.h>
+#include <math.h>
+
+// --- pin definitions ---
+const int ENA_RIGHT = 3;
+const int In1 = 4;
+const int In2 = 5;
+
+const int ENB_RIGHT = 6;
+const int In3 = 7;
+const int In4 = 8;
+
+const int trigPin = 9;
+const int echoPin = 10;
+
+const int ENC_LEFT = 22;
+const int In5 = 24;
+const int In6 = 26;
+
+const int In7 = 30;
+const int In8 = 32;
+const int END_LEFT = 28;
+
+int SPEED = 210;
+
+// phases
+bool phase01 = true;   // approach until obstacle
+bool phase02 = false;  // decide and perform long strafe around obstacle
+bool phase03 = false;  // micro-corrections until obstacle cleared
+bool phase04 = false;  // resume to target
+
+// navigation/time tuning (tweak on robot)
+const int STEP_MS = 220;          // forward step duration (ms)
+const int BACKUP_MS = 220;        // small backup (ms)
+const int STRAFE_LONG_MS = 1400;  // long strafe during avoidance (ms)
+const int STRAFE_SHORT_MS = 150;  // short corrective strafe (ms)
+const int TURN_MS_PER_RAD = 350;  // approximate ms of turn per radian (tune)
+const int OBSTACLE_DIST_CM = 15;  // ultrasonic threshold (cm)
+const float TARGET_X = 2.0;       // default target X (center of arena)
+float targetY = NAN;
+
+// tolerance to consider arrived (meters)
+const float DIST_TOL_M = 0.15f;
+
+// ---------- helper functions ----------
+void pinSetup() {
+  pinMode(In1, OUTPUT);
+  pinMode(In2, OUTPUT);
+  pinMode(ENA_RIGHT, OUTPUT);
+
+  pinMode(In3, OUTPUT);
+  pinMode(In4, OUTPUT);
+  pinMode(ENB_RIGHT, OUTPUT);
+
+  pinMode(In5, OUTPUT);
+  pinMode(In6, OUTPUT);
+  pinMode(ENC_LEFT, OUTPUT);
+
+  pinMode(In7, OUTPUT);
+  pinMode(In8, OUTPUT);
+  pinMode(END_LEFT, OUTPUT);
+}
+
+void stopMotor() {
+  analogWrite(ENA_RIGHT, 0);
+  analogWrite(ENB_RIGHT, 0);
+  analogWrite(ENC_LEFT, 0);
+  analogWrite(END_LEFT, 0);
+}
+
+// renamed to match use in sketch
+void goStraight(int time) {
+  // Right side forward
+  digitalWrite(In1, HIGH);
+  digitalWrite(In2, LOW);
+  digitalWrite(In3, HIGH);
+  digitalWrite(In4, LOW);
+  analogWrite(ENA_RIGHT, SPEED);
+  analogWrite(ENB_RIGHT, SPEED);
+
+  // Left side forward (note: wiring/polarity may need inversion)
+  digitalWrite(In5, HIGH);
+  digitalWrite(In6, LOW);
+  digitalWrite(In7, LOW);
+  digitalWrite(In8, HIGH);
+  analogWrite(ENC_LEFT, SPEED);
+  analogWrite(END_LEFT, SPEED);
+
+  delay(time);
+  stopMotor();
+}
+
+void goBackward(int time) {
+  // Right side reverse
+  digitalWrite(In1, LOW);
+  digitalWrite(In2, HIGH);
+  digitalWrite(In3, LOW);
+  digitalWrite(In4, HIGH);
+  analogWrite(ENA_RIGHT, SPEED);
+  analogWrite(ENB_RIGHT, SPEED);
+
+  // Left side reverse (mirror of forward)
+  digitalWrite(In5, LOW);
+  digitalWrite(In6, HIGH);
+  digitalWrite(In7, HIGH);
+  digitalWrite(In8, LOW);
+  analogWrite(ENC_LEFT, SPEED);
+  analogWrite(END_LEFT, SPEED);
+
+  delay(time);
+  stopMotor();
+}
+
+// ultrasonic check: returns true if obstacle within OBSTACLE_DIST_CM
+bool checkObject() {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  long duration = pulseIn(echoPin, HIGH, 30000); // timeout 30ms
+  if (duration == 0) return false; // no echo (out of range)
+  int distance = duration * 0.034 / 2;
+  if (distance <= OBSTACLE_DIST_CM) return true;
+  return false;
+}
+
+// Strafe function (uses your implementation). "R" = right, else left
+void strafe(const char* direction, int time) {
+  if (strcmp(direction, "R") == 0) {
+    // Strafe RIGHT (FR backward, FL forward, RR forward, RL backward depending on mapping)
+    digitalWrite(In5, HIGH); digitalWrite(In6, LOW);   // FL forward
+    digitalWrite(In1, LOW);  digitalWrite(In2, HIGH);  // FR backward
+    digitalWrite(In7, LOW);  digitalWrite(In8, HIGH);  // RL backward
+    digitalWrite(In3, HIGH); digitalWrite(In4, LOW);   // RR forward
+  } else {
+    // Strafe LEFT
+    digitalWrite(In5, LOW);  digitalWrite(In6, HIGH);  // FL backward
+    digitalWrite(In1, HIGH); digitalWrite(In2, LOW);   // FR forward
+    digitalWrite(In7, HIGH); digitalWrite(In8, LOW);   // RL forward
+    digitalWrite(In3, LOW);  digitalWrite(In4, HIGH);  // RR backward
+  }
+  analogWrite(ENC_LEFT, SPEED);
+  analogWrite(ENA_RIGHT, SPEED);
+  analogWrite(END_LEFT, SPEED);
+  analogWrite(ENB_RIGHT, SPEED);
+
+  delay(time);
+  stopMotor();
+}
+
+// turn helper: positive angle -> rotate CCW (left), negative -> CW (right)
+void rotateByAngle(float angleRad) {
+  int t = (int)(fabs(angleRad) * TURN_MS_PER_RAD);
+  if (t < 60) t = 60;
+  if (angleRad > 0) turn("L", t);
+  else turn("R", t);
+}
+
+// small orient-to-target using Enes100 pose (time-based correction)
+void orientToTarget(float desiredTheta) {
+  float current = Enes100.getTheta();
+  float err = desiredTheta - current;
+  // wrap to [-PI,PI]
+  while (err > M_PI) err -= 2*M_PI;
+  while (err < -M_PI) err += 2*M_PI;
+  if (fabs(err) > 0.15) {
+    rotateByAngle(err);
+  }
+}
+
+// ---------- your existing turn() function (unchanged) ----------
+void turn(const char* direction, int time) {
+  int mainState;
+  int secondState;
+
+  if (strcmp(direction, "R") == 0) {
+    mainState = HIGH;
+    secondState = LOW;
+  } else {
+    mainState = LOW;
+    secondState = HIGH;
+  }
+
+  // Right motors
+  digitalWrite(In1, mainState);
+  digitalWrite(In2, secondState);
+  digitalWrite(In3, mainState);
+  digitalWrite(In4, secondState);
+  analogWrite(ENA_RIGHT, SPEED);
+  analogWrite(ENB_RIGHT, SPEED);
+
+  // Left motors (opposite)
+  digitalWrite(In5, secondState);
+  digitalWrite(In6, mainState);
+  digitalWrite(In7, mainState);
+  digitalWrite(In8, secondState);
+  analogWrite(ENC_LEFT, SPEED);
+  analogWrite(END_LEFT, SPEED);
+
+  delay(time);
+  stopMotor();
+}
+
+// ---------- setup & main loop ----------
+void setup() {
+  delay(1000);
+  // Ensure SEED is defined somewhere else (your project). If not, replace with a literal.
+  Enes100.begin("BATMAN", SEED, 534, 1116, 13, 12);
+  delay(1000);
+  Enes100.println("Connected...");
+  pinSetup();
+
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+
+  // set default target Y (top or bottom) based on starting Y
+  delay(500); // give a moment for vision to initialize
+  float sy = Enes100.getY();
+  if (!isnan(sy)) {
+    if (sy < 1.0) targetY = 1.85; // start on bottom -> target top
+    else targetY = 0.15;         // start on top -> target bottom
+  } else {
+    // fallback: go to top
+    targetY = 1.85;
+  }
+}
+
+// Return true if close enough to target
+bool arrived() {
+  float rx = Enes100.getX();
+  float ry = Enes100.getY();
+  float dx = TARGET_X - rx;
+  float dy = targetY - ry;
+  float d = sqrt(dx*dx + dy*dy);
+  return (d <= DIST_TOL_M);
+}
+
+void loop() {
+  // quick abort if vision not available
+  float rx = Enes100.getX();
+  float ry = Enes100.getY();
+  float rtheta = Enes100.getTheta();
+
+  // Phase 1: go straight until obstacle seen
+  if (phase01) {
+    goStraight(STEP_MS);
+    delay(40);
+    if (checkObject()) {
+      // obstacle encountered -> go to avoidance decision
+      phase01 = false;
+      phase02 = true;
+      stopMotor(); // ensure stopped
+      delay(200);
+    }
+    // also check if we accidentally arrived (rare in phase1 but safe)
+    if (arrived()) {
+      stopMotor();
+      Enes100.println("ARRIVED");
+      while (1) delay(2000);
+    }
+    return;
+  }
+
+  // Phase 2: decide strafe side from current y and perform a longer strafe + forward
+  if (phase02) {
+    // decide side: if currently on bottom half (y < 1) we want to strafe toward top (R),
+    // if on top half, strafe toward bottom (L) — adapt to your arena mapping
+    const char* side;
+    if (ry >= 1.0) side = "R"; else side = "L";
+    // first attempt: long strafe around obstacle
+    strafe(side, STRAFE_LONG_MS);
+    delay(80);
+    // then a forward push to clear obstacle
+    goStraight(STEP_MS * 2);
+    delay(120);
+
+    // go to micro-correction phase to ensure ultrasonic cleared
+    phase02 = false;
+    phase03 = true;
+    return;
+  }
+
+  // Phase 3: micro corrections until ultrasonic clears (small strafes/backups)
+  if (phase03) {
+    int tries = 0;
+    const int MAX_TRIES = 6;
+    while (tries < MAX_TRIES && checkObject()) {
+      // small backup
+      goBackward(BACKUP_MS);
+      delay(60);
+      // short corrective strafe (alternate direction each try to increase chance of clearing)
+      if (tries % 2 == 0) strafe("R", STRAFE_SHORT_MS);
+      else strafe("L", STRAFE_SHORT_MS);
+      delay(60);
+      // small forward probe
+      goStraight(STEP_MS);
+      delay(80);
+      tries++;
+    }
+
+    if (!checkObject()) {
+      // obstacle cleared
+      phase03 = false;
+      phase04 = true;
+    } else {
+      // still blocked after tries: try a bigger maneuver (turn 90 deg, move, then re-attempt)
+      rotateByAngle(M_PI / 2.0); // turn ~90deg
+      delay(80);
+      goStraight(600);
+      delay(80);
+      // after big maneuver, try micro corrections once more next loop iteration
+      // we'll stay in phase03
+    }
+    return;
+  }
+
+  // Phase 4: resume navigation to target using vision; if blocked while doing so, return to phase02
+  if (phase04) {
+    // check arrival
+    if (arrived()) {
+      stopMotor();
+      Enes100.println("ARRIVED");
+      while (1) delay(2000);
+    }
+
+    // Compute heading toward target and do a small orient if needed
+    float dx = TARGET_X - rx;
+    float dy = targetY - ry;
+    float desired = atan2(dy, dx);
+    float err = desired - rtheta;
+    while (err > M_PI) err -= 2.0*M_PI;
+    while (err < -M_PI) err += 2.0*M_PI;
+
+    if (fabs(err) > 0.25) {
+      // big heading error -> rotate a bit
+      rotateByAngle(err);
+      delay(60);
+      return;
+    }
+
+    // If obstacle detected while proceeding, go back to avoidance
+    if (checkObject()) {
+      phase04 = false;
+      phase02 = true;
+      return;
+    }
+
+    // otherwise step forward
+    goStraight(STEP_MS);
+    delay(40);
+    return;
+  }
+
+  // fallback: if no phase active, go to phase01
+  phase01 = true;
+}
