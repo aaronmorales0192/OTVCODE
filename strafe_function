@@ -75,51 +75,42 @@ void going_straight(int time) {
 }
 
 void strafe(bool toRight, unsigned long durationMs) {
+  int mainState;
+  int secondState;
+
   if (toRight) {
-    // Left wheels forward
-    digitalWrite(In5, HIGH);
-    digitalWrite(In6, LOW);  // Front Left
-    analogWrite(ENC, SPEED);
-
-    digitalWrite(In7, LOW);
-    digitalWrite(In8, HIGH);  // Back Left
-    analogWrite(END, SPEED);
-
-    // Right wheels backward
-    digitalWrite(In3, LOW);
-    digitalWrite(In4, HIGH);  // Front Right
-    analogWrite(ENB, SPEED);
-
-    digitalWrite(In1, HIGH);
-    digitalWrite(In2, LOW);  // Back Right
-    analogWrite(ENA, SPEED);
+    mainState = HIGH;
+    secondState = LOW;
   } else {
-    // Strafe left: reverse the directions above
-
-    // Left wheels backward
-    digitalWrite(In5, LOW);
-    digitalWrite(In6, HIGH);  // Front Left
-    analogWrite(ENC, SPEED);
-
-    digitalWrite(In7, HIGH);
-    digitalWrite(In8, LOW);  // Back Left
-    analogWrite(END, SPEED);
-
-    // Right wheels forward
-    digitalWrite(In3, HIGH);
-    digitalWrite(In4, LOW);  // Front Right
-    analogWrite(ENB, SPEED);
-
-    digitalWrite(In1, LOW);
-    digitalWrite(In2, HIGH);  // Back Right
-    analogWrite(ENA, SPEED);
+    mainState = LOW;
+    secondState = HIGH;
   }
+  
+  
+  // Left wheels forward
+  digitalWrite(In5, mainState);
+  digitalWrite(In6, secondState);  // Front Left
+  analogWrite(ENC_LEFT, SPEED);
+
+  digitalWrite(In7, mainState);
+  digitalWrite(In8, secondState);  // Back Left
+  analogWrite(END_LEFT, SPEED);
+
+  // Right wheels backward
+  digitalWrite(In3, secondState);
+  digitalWrite(In4, mainState);  // Front Right
+  analogWrite(ENB_RIGHT, SPEED);
+
+  digitalWrite(In1, mainState);
+  digitalWrite(In2, secondState);  // Back Right
+  analogWrite(ENA_RIGHT, SPEED);
+  
 
   // keep strafing for requested time (blocking)
   delay(durationMs);
 
   // stop motors afterwards
-  stopMotors();
+  stopMotor();
 }
 
 // direction expected as "RIGHT" or anything else = LEFT
