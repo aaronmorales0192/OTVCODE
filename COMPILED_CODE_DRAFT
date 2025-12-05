@@ -111,7 +111,7 @@ void turn(const char* direction, int time) {
 void setup() {
   delay(1000);
   // Ensure SEED is defined somewhere else; otherwise define it above.
-  Enes100.begin("BATMAN", SEED, 534, 1116, 13, 12);
+  Enes100.begin("BATMAN", SEED, 292, 1120, 13, 12);
   delay(1000);
   Enes100.println("Connected...");
   pinSetup();
@@ -121,8 +121,8 @@ void loop() {
    if (phase01) { // orient vehicle
     // NOTE: this will call a 500ms turn every loop iteration until
     // the angle condition is satisfied.
-    turn("L", 50);
-    delay(50);
+    turn("L", 70);
+    delay(40);
 
     // re-read sensors after turning
     float angle = Enes100.getTheta();
@@ -130,13 +130,13 @@ void loop() {
 
     if (y >= 1) {
       // check for a narrow window near -pi/2 (adjust thresholds as needed)
-      if (angle < -1.51079632679 && angle > -1.6) {
+      if (angle < -1.3979632679 && angle > -1.6) {
         phase01 = false;
-        phase03 = true;
+        phase02 = true;
       }
     } else {
       // check near +pi/2
-      if (angle > 1.51079632679 && angle < 1.6) {
+      if (angle > 1.35 && angle < 1.60) {
         stopMotor();
         phase01 = false;
         phase02 = true;
@@ -152,4 +152,3 @@ void loop() {
   }
 
  }
-
