@@ -1,0 +1,15 @@
+const int ENA_BACK_LEFT = 2;
+const int In1 = 3;
+const int In2 = 4;
+
+const int ENB_FRONT_LEFT = 7;
+const int In3 = 5;
+const int In4 = 6;
+
+const int ENC_BACK_RIGHT = 8;
+const int In5 = 9;
+const int In6 = 10;
+
+const int In7 = 11;
+const int In8 = 12;
+const int END_LEFT = 13;
