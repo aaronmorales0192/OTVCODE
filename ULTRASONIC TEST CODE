@@ -1,0 +1,139 @@
+// -------------------- MOTOR SETUP --------------------
+
+// Back Left
+int ENA = 3;      // PWM
+int In1 = 4;
+int In2 = 5;
+
+int SPEED = 210;
+
+// Front Left
+int ENB = 6;      // PWM
+int In3 = 7;
+int In4 = 8;
+
+// FRONT RIGHT (REVERTED)
+int ENC = 22;     // original
+int In5 = 24;
+int In6 = 26;
+
+// BACK RIGHT (REVERTED)
+int END = 28;     // original
+int In7 = 30;
+int In8 = 32;
+
+// -------------------- ULTRASONIC SENSOR --------------------
+int trigPin = 36;
+int echoPin = 38;
+
+
+// -----------------------------------------------------------
+//  FUNCTIONS
+// -----------------------------------------------------------
+
+long getDistance() {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  long duration = pulseIn(echoPin, HIGH, 30000);
+  long distance = duration * 0.034 / 2;
+  return distance;
+}
+
+void goForward() {
+  digitalWrite(In1, HIGH);
+  digitalWrite(In2, LOW);
+  analogWrite(ENA, SPEED);
+
+  digitalWrite(In3, HIGH);
+  digitalWrite(In4, LOW);
+  analogWrite(ENB, SPEED);
+
+  digitalWrite(In5, HIGH);
+  digitalWrite(In6, LOW);
+  digitalWrite(ENC, HIGH);  // full speed digital
+  digitalWrite(In7, HIGH);
+  digitalWrite(In8, LOW);
+  digitalWrite(END, HIGH);  // full speed digital
+}
+
+void goBackward() {
+  digitalWrite(In1, HIGH);
+  digitalWrite(In2, LOW);
+
+  digitalWrite(In3, LOW);
+  digitalWrite(In4, HIGH);
+
+  digitalWrite(In5, HIGH);
+  digitalWrite(In6, LOW);
+ 
+
+  digitalWrite(In7, LOW);
+  digitalWrite(In8, HIGH);
+
+
+  analogWrite(ENA, SPEED);
+  analogWrite(ENB, SPEED);
+   analogWrite(ENC, SPEED);
+  analogWrite(END, SPEED);
+}
+
+
+// -----------------------------------------------------------
+//  SETUP
+// -----------------------------------------------------------
+void setup() {
+
+  Serial.begin(9600);
+
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+
+  pinMode(In1, OUTPUT);
+  pinMode(In2, OUTPUT);
+  pinMode(ENA, OUTPUT);
+
+  pinMode(In3, OUTPUT);
+  pinMode(In4, OUTPUT);
+  pinMode(ENB, OUTPUT);
+
+  pinMode(In5, OUTPUT);
+  pinMode(In6, OUTPUT);
+  pinMode(ENC, OUTPUT);
+
+  pinMode(In7, OUTPUT);
+  pinMode(In8, OUTPUT);
+  pinMode(END, OUTPUT);
+
+  goForward();
+}
+
+
+// -----------------------------------------------------------
+//  LOOP
+// -----------------------------------------------------------
+void loop() {
+
+  int distance = getDistance();
+
+  Serial.print("Distance: ");
+  Serial.println(distance);
+
+  if (distance > 0 && distance <= 10) {
+
+    while (distance > 0 && distance <= 10) {
+      goBackward();
+      distance = getDistance();
+
+      Serial.print("Backing... Distance: ");
+      Serial.println(distance);
+
+      delay(50);
+    }
+
+    goForward();
+  }
+}
