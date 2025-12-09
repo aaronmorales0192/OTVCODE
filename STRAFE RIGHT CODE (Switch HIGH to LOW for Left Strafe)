@@ -1,0 +1,69 @@
+
+// Back Left
+int ENA = 3;
+int In1 = 4;
+int In2 = 5;
+
+
+int SPEED = 210;
+
+// Front Left
+int ENB = 6;
+int In3 = 7;
+int In4 = 8;
+
+// FRONT RIGHT
+int ENC = 22;
+int In5 = 24;
+int In6 = 26;
+
+//BACK RIGHT
+int In7 = 30;
+int In8 = 32;
+int END = 28;
+
+void setup() {
+
+ //BACK LEFT
+
+  pinMode(In1, OUTPUT);
+  pinMode(In2, OUTPUT);
+  pinMode(ENA, OUTPUT);
+
+  digitalWrite(In1, LOW);
+  digitalWrite(In2, HIGH);
+
+  analogWrite(ENA, SPEED);
+
+ //FRONT LEFT
+  pinMode(In3, OUTPUT);
+  pinMode(In4, OUTPUT);
+  pinMode(ENB, OUTPUT);
+
+  digitalWrite(In3, HIGH);
+  digitalWrite(In4, LOW);
+
+  analogWrite(ENB, SPEED);
+
+//FRONT RIGHT
+  pinMode(In5, OUTPUT);
+  pinMode(In6, OUTPUT);
+  pinMode(ENC, OUTPUT);
+
+  digitalWrite(In5, LOW);
+  digitalWrite(In6, HIGH);
+
+  analogWrite(ENC, SPEED);
+
+//BACK RIGHT
+  pinMode(In7, OUTPUT);
+  pinMode(In8, OUTPUT);
+  pinMode(END, OUTPUT);
+
+  digitalWrite(In7, HIGH);
+  digitalWrite(In8, LOW);
+
+  analogWrite(END, SPEED);
+}
+
+void loop() {}
