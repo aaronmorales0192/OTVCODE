@@ -1,0 +1,240 @@
+
+
+#include "Enes100.h"
+#include <string.h> // for strcmp
+// --- pin definitions ---
+const int ENA_RIGHT = 3;
+const int In1 = 4;
+const int In2 = 5;
+
+const int ENB_RIGHT = 6;
+const int In3 = 7;
+const int In4 = 8;
+
+const int ENC_LEFT = 22;
+const int In5 = 24;
+const int In6 = 26;
+
+const int In7 = 32;
+const int In8 = 30;
+const int END_LEFT = 28;
+
+int trigPin = 36;
+int echoPin = 38;
+
+int SPEED = 210;
+
+bool phase01 = true;
+bool phase02 = false;
+bool phase03 = false;
+bool phase04 = false;
+bool phase05 = false;
+// Turn in place: left forward, right backward = turn right
+
+
+
+
+void pinSetup() {
+  pinMode(In1, OUTPUT);
+  pinMode(In2, OUTPUT);
+  pinMode(ENA_RIGHT, OUTPUT);
+
+  pinMode(In3, OUTPUT);
+  pinMode(In4, OUTPUT);
+  pinMode(ENB_RIGHT, OUTPUT);
+
+  pinMode(In5, OUTPUT);
+  pinMode(In6, OUTPUT);
+  pinMode(ENC_LEFT, OUTPUT);
+
+  pinMode(In7, OUTPUT);
+  pinMode(In8, OUTPUT);
+  pinMode(END_LEFT, OUTPUT);
+}
+
+void stopMotor() {
+  analogWrite(ENA_RIGHT, 0);
+  analogWrite(ENB_RIGHT, 0);
+  analogWrite(ENC_LEFT, 0);
+  analogWrite(END_LEFT, 0);
+}
+
+void strafe(bool toRight, unsigned long durationMs) {
+  if (toRight) {
+    // Left wheels forward
+    digitalWrite(In5, HIGH);
+    digitalWrite(In6, LOW);  // Front Left
+    analogWrite(ENC_LEFT, SPEED);
+
+    digitalWrite(In7, LOW);
+    digitalWrite(In8, HIGH);  // Back Left
+    analogWrite(END_LEFT, SPEED);
+
+    // Right wheels backward
+    digitalWrite(In3, LOW);
+    digitalWrite(In4, HIGH);  // Front Right
+    analogWrite(ENB_RIGHT, SPEED);
+
+    digitalWrite(In1, HIGH);
+    digitalWrite(In2, LOW);  // Back Right
+    analogWrite(ENA_RIGHT, SPEED);
+  } else {
+    // Strafe left: reverse the directions above
+
+    // Left wheels backward
+    digitalWrite(In5, LOW);
+    digitalWrite(In6, HIGH);  // Front Left
+    analogWrite(ENC_LEFT, SPEED);
+
+    digitalWrite(In7, HIGH);
+    digitalWrite(In8, LOW);  // Back Left
+    analogWrite(END_LEFT, SPEED);
+
+    // Right wheels forward
+    digitalWrite(In3, HIGH);
+    digitalWrite(In4, LOW);  // Front Right
+    analogWrite(ENB_RIGHT, SPEED);
+
+    digitalWrite(In1, LOW);
+    digitalWrite(In2, HIGH);  // Back Right
+    analogWrite(ENA_RIGHT, SPEED);
+  }
+
+  // keep strafing for requested time (blocking)
+  delay(durationMs);
+
+  // stop motors afterwards
+  stopMotor();
+}
+
+void going_straight(int time) {
+  // Right side
+  digitalWrite(In1, HIGH);
+  digitalWrite(In2, LOW);
+  digitalWrite(In3, HIGH);
+  digitalWrite(In4, LOW);
+  analogWrite(ENA_RIGHT, SPEED);
+  analogWrite(ENB_RIGHT, SPEED);
+
+  // Left side
+  digitalWrite(In5, HIGH);
+  digitalWrite(In6, LOW);
+  digitalWrite(In7, LOW);
+  digitalWrite(In8, HIGH);
+  analogWrite(ENC_LEFT, SPEED);
+  analogWrite(END_LEFT, SPEED);
+
+  delay(time);
+  stopMotor();
+}
+
+long getDistance() {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  long duration = pulseIn(echoPin, HIGH, 30000);
+  long distance = duration * 0.034 / 2;
+  return distance;
+}
+
+// direction expected as "RIGHT" or anything else = LEFT
+void turn(const char* direction, int time) {
+  int mainState;
+  int secondState;
+
+  if (strcmp(direction, "R") == 0) {
+    mainState = HIGH;
+    secondState = LOW;
+  } else {
+    mainState = LOW;
+    secondState = HIGH;
+  }
+
+  // Right motors
+  digitalWrite(In1, mainState);
+  digitalWrite(In2, secondState);
+  digitalWrite(In3, mainState);
+  digitalWrite(In4, secondState);
+  analogWrite(ENA_RIGHT, SPEED);
+  analogWrite(ENB_RIGHT, SPEED);
+
+  // Left motors
+  digitalWrite(In5, secondState);
+  digitalWrite(In6, mainState);
+  digitalWrite(In7, mainState);
+  digitalWrite(In8, secondState);
+  analogWrite(ENC_LEFT, SPEED);
+  analogWrite(END_LEFT, SPEED);
+
+  delay(time);
+  stopMotor();
+}
+
+
+
+void setup() {
+  delay(1000);
+  // Ensure SEED is defined somewhere else; otherwise define it above.
+  Enes100.begin("BATMAN", SEED, 292, 1116, 11, 10);
+  delay(1000);
+  Enes100.println("Connected...");
+  pinSetup();
+}
+
+void loop() {
+   if (phase01) { // orient vehicle
+    // NOTE: this will call a 500ms turn every loop iteration until
+    // the angle condition is satisfied.
+    turn("L", 70);
+    delay(40);
+
+    // re-read sensors after turning
+    float angle = Enes100.getTheta();
+    float y = Enes100.getY();
+
+    if (y >= 1) {
+      // check for a narrow window near -pi/2 (adjust thresholds as needed)
+      if (angle < -1.3979632679 && angle > -1.6) {
+        phase01 = false;
+        phase02 = true;
+      }
+    } else {
+      // check near +pi/2
+      if (angle > 1.35 && angle < 1.60) {
+        stopMotor();
+        phase01 = false;
+        phase02 = true;
+      }
+    }
+  }
+
+  if (phase02) {  // go to mission site.
+    stopMotor();
+    delay(1500);
+    going_straight(7000);
+    phase02 = false;
+  }
+  if (phase03){
+    if (Enes100.getY() > 1){
+      turn("R", 3770);
+      phase03 = false;
+      phase04 = true;
+    } else {
+      phase01 = true;
+      phase03 = false;
+    }
+  } if (phase04){
+    going_straight(1000);
+    delay(500);
+    if (getDistance() < 15){
+      strafe("R", 4000);
+      going_straight(5000);
+      strafe("L", 4000);
+      going_straight(6000);
+      phase04 = false;
+    }
+  }
+ }
